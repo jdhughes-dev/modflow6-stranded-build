@@ -1,0 +1,129 @@
+name: MODFLOW 6 stranded mass preview build
+# Builds the developmode distribution of the stranded-mass-preview branch of
+# jdhughes-dev/modflow6, which combines MODFLOW-ORG/modflow6#3056, #2918, and
+# #3043, the same way the MODFLOW 6 nightly build does for develop.
+concurrency:
+  group: preview-build
+  cancel-in-progress: true
+on:
+  schedule:
+    - cron: '0 7 * * *' # nightly; skipped when the branch has not changed
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Build even if the branch has not changed since the last release'
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+env:
+  BRANCH: stranded-mass-preview
+jobs:
+  check:
+    name: Check for changes
+    runs-on: ubuntu-22.04
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.compare.outputs.build }}
+    steps:
+      - name: Checkout modflow6
+        uses: actions/checkout@v7
+        with:
+          repository: jdhughes-dev/modflow6
+          ref: ${{ env.BRANCH }}
+          path: modflow6
+
+      - name: Get commit
+        id: sha
+        working-directory: modflow6
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install Python packages
+        run: pip install pytest PyYAML filelock modflow-devtools packaging
+
+      - name: Get version
+        id: version
+        working-directory: modflow6/distribution
+        run: echo "version=$(python update_version.py -g)" >> "$GITHUB_OUTPUT"
+
+      - name: Compare with the last release
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.sha.outputs.sha }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          short="${SHA:0:10}"
+          tags=$(gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName')
+          if [[ "$FORCE" == "true" ]] || ! grep -q -- "-${short}$" <<< "$tags"; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "building $SHA"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "$SHA was already released"
+          fi
+
+  make_dist:
+    name: Make developmode distribution
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    uses: jdhughes-dev/modflow6/.github/workflows/release.yml@stranded-mass-preview
+    with:
+      ref: ${{ needs.check.outputs.sha }}
+      releasemode: false
+      run_tests: true
+      version: ${{ needs.check.outputs.version }}
+
+  release:
+    name: Create release
+    needs:
+      - check
+      - make_dist
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Collect assets
+        run: |
+          mkdir assets
+          find artifacts -path 'artifacts/mf*' -name '*.zip' -exec cp {} assets/ \;
+          cp artifacts/doc/*.pdf assets/
+          ls -l assets
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.check.outputs.sha }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          tag="$(date -u +%Y%m%d)-${SHA:0:10}"
+          cat > body.md << EOF
+          Developmode build of MODFLOW ${VERSION} from the [stranded-mass-preview](https://github.com/jdhughes-dev/modflow6/tree/${BRANCH}) branch at [${SHA:0:10}](https://github.com/jdhughes-dev/modflow6/commit/${SHA}), which combines three MODFLOW 6 pull requests that have not been merged (the pull requests are listed in the README of this repository):
+
+          - 3056, the previous saturation for sorbed mass
+          - 2918, stranded mass in the MST Package
+          - 3043, stranded mass in lakes and stream reaches
+
+          This is not a MODFLOW 6 release. It is provisional and will be replaced as the pull requests change.
+          EOF
+          gh release create "$tag" assets/* -R "$GITHUB_REPOSITORY" \
+            --title "${tag} preview build" --notes-file body.md --prerelease
+
+      - name: Delete older releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[10:][].tagName' |
+            xargs -r -n 1 gh release delete --cleanup-tag --yes -R "$GITHUB_REPOSITORY"
