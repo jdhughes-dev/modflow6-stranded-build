@@ -14,6 +14,17 @@ binaries for Linux and Windows built with the Intel classic compiler, binaries f
 macOS on Apple silicon built with gfortran, the tests, and the documentation.
 Each build is posted under [Releases](../../releases); the last 10 are kept.
 
+The extended Windows build (parallel and NetCDF) is left out. To do that, the
+workflow calls a copy of `.github/workflows/release.yml` from the branch with
+the extended entries removed from the build and distribution matrices. If the
+release workflow on the branch changes, refresh the copy:
+
+```shell
+git -C ../modflow6 show origin/stranded-mass-preview:.github/workflows/release.yml > .github/workflows/release.yml
+```
+
+and remove the two `extended: true` matrix entries again.
+
 The workflow runs nightly and builds only when the branch has changed since the
 last release. Run it by hand from the Actions tab, with `force` to rebuild an
 unchanged branch.

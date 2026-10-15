@@ -74,7 +74,7 @@ jobs:
     name: Make developmode distribution
     needs: check
     if: needs.check.outputs.build == 'true'
-    uses: jdhughes-dev/modflow6/.github/workflows/release.yml@stranded-mass-preview
+    uses: ./.github/workflows/release.yml
     with:
       ref: ${{ needs.check.outputs.sha }}
       releasemode: false
