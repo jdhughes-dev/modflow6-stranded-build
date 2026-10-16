@@ -12,7 +12,9 @@ The build uses the MODFLOW 6 release workflow in developmode, as the
 [MODFLOW 6 nightly build](https://github.com/MODFLOW-ORG/modflow6-nightly-build) does:
 binaries for Linux and Windows built with the Intel classic compiler, binaries for
 macOS on Apple silicon built with gfortran, the tests, and the documentation.
-Each build is posted under [Releases](../../releases); the last 10 are kept.
+Each build is posted under [Releases](../../releases), tagged with the UTC date
+and time of the build and the commit (`YYYYMMDD-HHMM-<commit>`); the newest is
+marked Latest, and the last 10 are kept.
 
 The extended Windows build (parallel and NetCDF) is left out. To do that, the
 workflow calls a copy of `.github/workflows/release.yml` from the branch with

@@ -108,7 +108,8 @@ jobs:
           SHA: ${{ needs.check.outputs.sha }}
           VERSION: ${{ needs.check.outputs.version }}
         run: |
-          tag="$(date -u +%Y%m%d)-${SHA:0:10}"
+          # the UTC time keeps two builds on one day apart and in order
+          tag="$(date -u +%Y%m%d-%H%M)-${SHA:0:10}"
           cat > body.md << EOF
           Developmode build of MODFLOW ${VERSION} from the [stranded-mass-preview](https://github.com/jdhughes-dev/modflow6/tree/${BRANCH}) branch at [${SHA:0:10}](https://github.com/jdhughes-dev/modflow6/commit/${SHA}), which combines three MODFLOW 6 pull requests that have not been merged (the pull requests are listed in the README of this repository):
 
@@ -119,7 +120,7 @@ jobs:
           This is not a MODFLOW 6 release. It is provisional and will be replaced as the pull requests change.
           EOF
           gh release create "$tag" assets/* -R "$GITHUB_REPOSITORY" \
-            --title "${tag} preview build" --notes-file body.md --prerelease
+            --title "${tag} preview build" --notes-file body.md --latest
 
       - name: Delete older releases
         env:
